@@ -1,5 +1,0 @@
-export async function GET() {
-  return new Response('3887b37ee5a6a1d70b932b070ba35829afb274432369106a9e63898c1a7e79727e39ba0da58b62857b191f32a5bc547d4ee2bd117af2d4e27184b7ef8a282000', {
-    headers: { 'Content-Type': 'text/plain' },
-  });
-}
