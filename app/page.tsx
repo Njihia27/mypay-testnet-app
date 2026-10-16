@@ -9,6 +9,8 @@ declare global {
 
 export default function Home() {
   const [sdkLoaded, setSdkLoaded] = useState(false);
+  const [username, setUsername] = useState("");
+  const [status, setStatus] = useState("");
 
   useEffect(() => {
     const script = document.createElement("script");
@@ -16,6 +18,7 @@ export default function Home() {
     script.async = true;
     script.onload = () => {
       if (window.Pi) {
+        // For Testnet: sandbox:true | For Mainnet: sandbox:false
         window.Pi.init({ version: "2.0", sandbox: true });
         setSdkLoaded(true);
       }
@@ -25,15 +28,15 @@ export default function Home() {
 
   const handlePay = async () => {
     if (!window.Pi || !sdkLoaded) {
-      alert("SDK not loaded. Open in Pi Browser sandbox.");
+      alert("Open in Pi Browser!");
       return;
     }
     try {
-      // 1. MUST AUTHENTICATE WITH PAYMENTS SCOPE
+      setStatus("Authenticating...");
       const scopes = ["username", "payments"];
 
-      function onIncompletePaymentFound(payment: any) {
-        console.log("Incomplete payment:", payment);
+      const onIncompletePaymentFound = (payment: any) => {
+        console.log("Incomplete found:", payment.identifier);
         return fetch("/api/complete", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -42,71 +45,90 @@ export default function Home() {
             txid: payment.transaction?.txid || "",
           }),
         });
-      }
+      };
 
       const auth = await window.Pi.authenticate(scopes, onIncompletePaymentFound);
-      console.log("Auth OK:", auth);
+      setUsername(auth.user.username);
+      setStatus(`Authenticated as ${auth.user.username}`);
+      console.log("Auth:", auth);
 
-      // 2. CREATE PAYMENT AFTER AUTH
+      setStatus("Creating payment...");
       const paymentData = {
         amount: 1,
-        memo: "MyPay Testnet",
-        metadata: { purpose: "testnet_checkout" },
+        memo: "MyPay Testnet - 1 Pi",
+        metadata: { purpose: "testnet_checkout", app: "MyPay" },
       };
 
       await window.Pi.createPayment(paymentData, {
         onReadyForServerApproval: async (paymentId: string) => {
-          console.log("Ready for approval:", paymentId);
+          setStatus(`Approving ${paymentId}...`);
           const res = await fetch("/api/approve", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ paymentId }),
           });
           const data = await res.json();
-          console.log("Approve result:", data);
+          console.log("Approve:", data);
+          setStatus("Approved! Check wallet to confirm");
         },
         onReadyForServerCompletion: async (paymentId: string, txid: string) => {
-          console.log("Ready for completion:", paymentId, txid);
+          setStatus(`Completing ${txid}...`);
           const res = await fetch("/api/complete", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ paymentId, txid }),
           });
           const data = await res.json();
-          console.log("Complete result:", data);
-          alert("Payment COMPLETED! TxID: " + txid);
+          console.log("Complete:", data);
+          setStatus(`COMPLETED! TxID: ${txid}`);
+          alert(`Payment COMPLETED! TxID: ${txid}`);
         },
         onCancel: (paymentId: string) => {
-          alert("Payment cancelled: " + paymentId);
+          setStatus(`Cancelled: ${paymentId}`);
         },
         onError: (error: any) => {
-          alert("Payment error: " + JSON.stringify(error));
+          console.error(error);
+          setStatus(`Error: ${JSON.stringify(error)}`);
+          alert(`Payment error: ${error}`);
         },
       });
     } catch (err: any) {
       console.error(err);
-      alert("Error: " + err.message);
+      setStatus(`Error: ${err.message}`);
+      alert(`Error: ${err.message}`);
     }
   };
 
   return (
-    <main style={{ padding: 40, textAlign: "center" }}>
-      <h1>MyPay Testnet App</h1>
-      <p>SDK Loaded: {sdkLoaded ? "Yes" : "No"}</p>
+    <main style={{ padding: 40, textAlign: "center", fontFamily: "sans-serif" }}>
+      <h1 style={{ fontSize: 32, fontWeight: "bold" }}>MyPay Testnet App</h1>
+      <p style={{ marginTop: 10 }}>
+        SDK: {sdkLoaded ? "✅ Loaded" : "⏳ Loading..."} {username && `| User: ${username}`}
+      </p>
+      <p style={{ marginTop: 10, color: "#7c3aed", fontWeight: "bold", minHeight: 20 }}>{status}</p>
+
       <button
         onClick={handlePay}
+        disabled={!sdkLoaded}
         style={{
-          padding: "15px 30px",
+          marginTop: 20,
+          padding: "16px 32px",
           fontSize: 18,
-          background: "#7c3aed",
+          fontWeight: "bold",
+          background: sdkLoaded ? "#7c3aed" : "#9ca3af",
           color: "white",
           border: "none",
-          borderRadius: 10,
-          cursor: "pointer",
+          borderRadius: 12,
+          cursor: sdkLoaded ? "pointer" : "not-allowed",
         }}
       >
         Pay 1 Pi (Testnet)
       </button>
+
+      <div style={{ marginTop: 30, fontSize: 12, color: "#6b7280" }}>
+        <p>Last TxID: 771fb46e857bb6119ae8f8d-c7d7473ae01e2d7459c7a0d54ed358ad8bf419b2f ✅</p>
+        <p>Wallet: GAKUW45LN4C...W7A7GN</p>
+      </div>
     </main>
   );
 }
