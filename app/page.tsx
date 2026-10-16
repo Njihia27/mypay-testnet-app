@@ -25,10 +25,29 @@ export default function Home() {
 
   const handlePay = async () => {
     if (!window.Pi || !sdkLoaded) {
-      alert("Pi SDK not loaded. Open in Pi Browser sandbox.");
+      alert("SDK not loaded. Open in Pi Browser sandbox.");
       return;
     }
     try {
+      // 1. MUST AUTHENTICATE WITH PAYMENTS SCOPE
+      const scopes = ["username", "payments"];
+
+      function onIncompletePaymentFound(payment: any) {
+        console.log("Incomplete payment:", payment);
+        return fetch("/api/complete", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            paymentId: payment.identifier,
+            txid: payment.transaction?.txid || "",
+          }),
+        });
+      }
+
+      const auth = await window.Pi.authenticate(scopes, onIncompletePaymentFound);
+      console.log("Auth OK:", auth);
+
+      // 2. CREATE PAYMENT AFTER AUTH
       const paymentData = {
         amount: 1,
         memo: "MyPay Testnet",
@@ -44,7 +63,7 @@ export default function Home() {
             body: JSON.stringify({ paymentId }),
           });
           const data = await res.json();
-          console.log("Approve:", data);
+          console.log("Approve result:", data);
         },
         onReadyForServerCompletion: async (paymentId: string, txid: string) => {
           console.log("Ready for completion:", paymentId, txid);
@@ -54,7 +73,7 @@ export default function Home() {
             body: JSON.stringify({ paymentId, txid }),
           });
           const data = await res.json();
-          console.log("Complete:", data);
+          console.log("Complete result:", data);
           alert("Payment COMPLETED! TxID: " + txid);
         },
         onCancel: (paymentId: string) => {
@@ -65,6 +84,7 @@ export default function Home() {
         },
       });
     } catch (err: any) {
+      console.error(err);
       alert("Error: " + err.message);
     }
   };
