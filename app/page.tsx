@@ -18,8 +18,8 @@ export default function Home() {
     script.async = true;
     script.onload = () => {
       if (window.Pi) {
-        // For Testnet: sandbox:true | For Mainnet: sandbox:false
-        window.Pi.init({ version: "2.0", sandbox: true });
+        // MAINNET MODE - Real Pi
+        window.Pi.init({ version: "2.0", sandbox: false });
         setSdkLoaded(true);
       }
     };
@@ -28,7 +28,7 @@ export default function Home() {
 
   const handlePay = async () => {
     if (!window.Pi || !sdkLoaded) {
-      alert("Open in Pi Browser!");
+      alert("Open this in Pi Browser - Pi Mainnet!");
       return;
     }
     try {
@@ -36,7 +36,7 @@ export default function Home() {
       const scopes = ["username", "payments"];
 
       const onIncompletePaymentFound = (payment: any) => {
-        console.log("Incomplete found:", payment.identifier);
+        console.log("Incomplete payment:", payment);
         return fetch("/api/complete", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -49,63 +49,60 @@ export default function Home() {
 
       const auth = await window.Pi.authenticate(scopes, onIncompletePaymentFound);
       setUsername(auth.user.username);
-      setStatus(`Authenticated as ${auth.user.username}`);
-      console.log("Auth:", auth);
+      setStatus(`Authenticated: ${auth.user.username}`);
 
-      setStatus("Creating payment...");
+      setStatus("Creating REAL payment...");
+      
+      // REAL MAINNET AMOUNT - change this to your product price
       const paymentData = {
-        amount: 1,
-        memo: "MyPay Testnet - 1 Pi",
-        metadata: { purpose: "testnet_checkout", app: "MyPay" },
+        amount: 1, // 1 Real Pi
+        memo: "MyPay Mainnet - 1 Pi",
+        metadata: { purpose: "mainnet_checkout", app: "MyPay" },
       };
 
       await window.Pi.createPayment(paymentData, {
         onReadyForServerApproval: async (paymentId: string) => {
-          setStatus(`Approving ${paymentId}...`);
+          setStatus(`Approving MAINNET ${paymentId}...`);
           const res = await fetch("/api/approve", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ paymentId }),
           });
           const data = await res.json();
-          console.log("Approve:", data);
-          setStatus("Approved! Check wallet to confirm");
+          console.log("Mainnet Approve:", data);
+          setStatus("Approved on Mainnet! Confirm in wallet");
         },
         onReadyForServerCompletion: async (paymentId: string, txid: string) => {
-          setStatus(`Completing ${txid}...`);
+          setStatus(`Completing MAINNET ${txid}...`);
           const res = await fetch("/api/complete", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ paymentId, txid }),
           });
           const data = await res.json();
-          console.log("Complete:", data);
-          setStatus(`COMPLETED! TxID: ${txid}`);
-          alert(`Payment COMPLETED! TxID: ${txid}`);
+          console.log("Mainnet Complete:", data);
+          setStatus(`MAINNET COMPLETED! TxID: ${txid}`);
+          alert(`REAL Pi Payment COMPLETED!\nTxID: ${txid}\nCheck blockchain!`);
         },
         onCancel: (paymentId: string) => {
-          setStatus(`Cancelled: ${paymentId}`);
+          setStatus(`Mainnet Cancelled: ${paymentId}`);
         },
         onError: (error: any) => {
           console.error(error);
-          setStatus(`Error: ${JSON.stringify(error)}`);
-          alert(`Payment error: ${error}`);
+          setStatus(`Mainnet Error: ${JSON.stringify(error)}`);
         },
       });
     } catch (err: any) {
       console.error(err);
       setStatus(`Error: ${err.message}`);
-      alert(`Error: ${err.message}`);
     }
   };
 
   return (
     <main style={{ padding: 40, textAlign: "center", fontFamily: "sans-serif" }}>
-      <h1 style={{ fontSize: 32, fontWeight: "bold" }}>MyPay Testnet App</h1>
-      <p style={{ marginTop: 10 }}>
-        SDK: {sdkLoaded ? "✅ Loaded" : "⏳ Loading..."} {username && `| User: ${username}`}
-      </p>
-      <p style={{ marginTop: 10, color: "#7c3aed", fontWeight: "bold", minHeight: 20 }}>{status}</p>
+      <h1 style={{ fontSize: 32, fontWeight: "bold" }}>MyPay Mainnet App</h1>
+      <p>SDK: {sdkLoaded ? "✅ Loaded (Mainnet)" : "⏳ Loading..."} {username && `| ${username}`}</p>
+      <p style={{ marginTop: 10, color: "#dc2626", fontWeight: "bold" }}>{status}</p>
 
       <button
         onClick={handlePay}
@@ -115,20 +112,19 @@ export default function Home() {
           padding: "16px 32px",
           fontSize: 18,
           fontWeight: "bold",
-          background: sdkLoaded ? "#7c3aed" : "#9ca3af",
+          background: sdkLoaded ? "#000000" : "#9ca3af",
           color: "white",
           border: "none",
           borderRadius: 12,
-          cursor: sdkLoaded ? "pointer" : "not-allowed",
+          cursor: "pointer",
         }}
       >
-        Pay 1 Pi (Testnet)
+        Pay 1 Real Pi (Mainnet)
       </button>
 
-      <div style={{ marginTop: 30, fontSize: 12, color: "#6b7280" }}>
-        <p>Last TxID: 771fb46e857bb6119ae8f8d-c7d7473ae01e2d7459c7a0d54ed358ad8bf419b2f ✅</p>
-        <p>Wallet: GAKUW45LN4C...W7A7GN</p>
-      </div>
+      <p style={{ marginTop: 30, fontSize: 12, color: "red" }}>
+        ⚠️ MAINNET - Real Pi will be deducted!
+      </p>
     </main>
   );
 }
