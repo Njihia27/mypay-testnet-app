@@ -9,122 +9,90 @@ declare global {
 
 export default function Home() {
   const [sdkLoaded, setSdkLoaded] = useState(false);
-  const [username, setUsername] = useState("");
+  const [isSandboxEnv, setIsSandboxEnv] = useState(false);
   const [status, setStatus] = useState("");
+  const [error, setError] = useState("");
 
   useEffect(() => {
     const script = document.createElement("script");
     script.src = "https://sdk.minepi.com/pi-sdk.js";
     script.async = true;
     script.onload = () => {
-      if (window.Pi) {
-        // MAINNET MODE - Real Pi
-        window.Pi.init({ version: "2.0", sandbox: false });
-        setSdkLoaded(true);
-      }
+      const isSandbox = window.location.hostname.includes("sandbox.minepi.com");
+      setIsSandboxEnv(isSandbox);
+      window.Pi.init({ version: "2.0", sandbox: isSandbox });
+      setSdkLoaded(true);
     };
     document.body.appendChild(script);
   }, []);
 
   const handlePay = async () => {
-    if (!window.Pi || !sdkLoaded) {
-      alert("Open this in Pi Browser - Pi Mainnet!");
+    if (!sdkLoaded) {
+      alert("Open this in Pi Browser - PI Mainnet!");
       return;
     }
     try {
       setStatus("Authenticating...");
       const scopes = ["username", "payments"];
-
-      const onIncompletePaymentFound = (payment: any) => {
-        console.log("Incomplete payment:", payment);
+      const onIncompletePayment = (payment: any) => {
         return fetch("/api/complete", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            paymentId: payment.identifier,
-            txid: payment.transaction?.txid || "",
-          }),
+          body: JSON.stringify({ paymentId: payment.identifier, txid: payment.transaction?.txid || "" }),
         });
       };
-
-      const auth = await window.Pi.authenticate(scopes, onIncompletePaymentFound);
-      setUsername(auth.user.username);
-      setStatus(`Authenticated: ${auth.user.username}`);
-
-      setStatus("Creating REAL payment...");
-      
-      // REAL MAINNET AMOUNT - change this to your product price
+      const auth = await window.Pi.authenticate(scopes, onIncompletePayment);
+      setStatus("Creating payment...");
       const paymentData = {
-        amount: 1, // 1 Real Pi
-        memo: "MyPay Mainnet - 1 Pi",
+        amount: 1,
+        memo: "MyPay - Mainnet",
         metadata: { purpose: "mainnet_checkout", app: "MyPay" },
       };
-
+      const onReadyForServerApproval = async (paymentId: string) => {
+        setStatus("Approving...");
+        await fetch("/api/approve", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ paymentId }),
+        });
+        setStatus("Approved! Confirm in wallet!");
+      };
+      const onReadyForServerCompletion = async (paymentId: string, txid: string) => {
+        setStatus("Completing...");
+        await fetch("/api/complete", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ paymentId, txid }),
+        });
+        setStatus("PAYMENT COMPLETED!");
+      };
+      const onCancel = (paymentId: string) => {
+        setStatus("Cancelled: " + paymentId);
+      };
+      const onError = (error: any) => {
+        setStatus("Error: " + (error?.message || JSON.stringify(error)));
+      };
       await window.Pi.createPayment(paymentData, {
-        onReadyForServerApproval: async (paymentId: string) => {
-          setStatus(`Approving MAINNET ${paymentId}...`);
-          const res = await fetch("/api/approve", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ paymentId }),
-          });
-          const data = await res.json();
-          console.log("Mainnet Approve:", data);
-          setStatus("Approved on Mainnet! Confirm in wallet");
-        },
-        onReadyForServerCompletion: async (paymentId: string, txid: string) => {
-          setStatus(`Completing MAINNET ${txid}...`);
-          const res = await fetch("/api/complete", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ paymentId, txid }),
-          });
-          const data = await res.json();
-          console.log("Mainnet Complete:", data);
-          setStatus(`MAINNET COMPLETED! TxID: ${txid}`);
-          alert(`REAL Pi Payment COMPLETED!\nTxID: ${txid}\nCheck blockchain!`);
-        },
-        onCancel: (paymentId: string) => {
-          setStatus(`Mainnet Cancelled: ${paymentId}`);
-        },
-        onError: (error: any) => {
-          console.error(error);
-          setStatus(`Mainnet Error: ${JSON.stringify(error)}`);
-        },
+        onReadyForServerApproval,
+        onReadyForServerCompletion,
+        onCancel,
+        onError,
       });
     } catch (err: any) {
-      console.error(err);
-      setStatus(`Error: ${err.message}`);
+      setStatus("Error: " + err.message);
     }
   };
 
   return (
-    <main style={{ padding: 40, textAlign: "center", fontFamily: "sans-serif" }}>
-      <h1 style={{ fontSize: 32, fontWeight: "bold" }}>MyPay Mainnet App</h1>
-      <p>SDK: {sdkLoaded ? "✅ Loaded (Mainnet)" : "⏳ Loading..."} {username && `| ${username}`}</p>
-      <p style={{ marginTop: 10, color: "#dc2626", fontWeight: "bold" }}>{status}</p>
-
-      <button
-        onClick={handlePay}
-        disabled={!sdkLoaded}
-        style={{
-          marginTop: 20,
-          padding: "16px 32px",
-          fontSize: 18,
-          fontWeight: "bold",
-          background: sdkLoaded ? "#000000" : "#9ca3af",
-          color: "white",
-          border: "none",
-          borderRadius: 12,
-          cursor: "pointer",
-        }}
-      >
-        Pay 1 Real Pi (Mainnet)
+    <main style={{ padding: 20, textAlign: "center", fontFamily: "sans-serif" }}>
+      <h1>{isSandboxEnv ? "MyPay Testnet App" : "MyPay Mainnet App"}</h1>
+      <p>SDK: {sdkLoaded ? (isSandboxEnv ? "Loaded (Testnet) - Sandbox OK" : "Loaded (Mainnet)") : "Loading..."}</p>
+      <p>Status: {status}</p>
+      <button onClick={handlePay} style={{ padding: "15px 30px", fontSize: 18, fontWeight: "bold", background: "#000", color: "#fff", border: "none", borderRadius: 10, cursor: "pointer", marginTop: 20 }}>
+        {isSandboxEnv ? "Pay 1 Test Pi (Testnet)" : "Pay 1 Real Pi (Mainnet)"}
       </button>
-
-      <p style={{ marginTop: 30, fontSize: 12, color: "red" }}>
-        ⚠️ MAINNET - Real Pi will be deducted!
-      </p>
+      {!isSandboxEnv && <p style={{ marginTop: 10, fontSize: 12, color: "red" }}>MAINNET - Real Pi will be deducted!</p>}
+      {isSandboxEnv && <p style={{ marginTop: 10, fontSize: 12, color: "green" }}>SANDBOX - Test Pi only, safe!</p>}
     </main>
   );
 }
